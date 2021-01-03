@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# project files
+predictor/setup.py
+predictor/scratch.ipynb
