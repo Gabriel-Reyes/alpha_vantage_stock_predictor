@@ -41,15 +41,24 @@ def historical_trends(df):
 cvx = historical_trends(cvx)
 
 
-# splitting for train/test in sklearn train_test_split style, testing 2020 year
+# splitting for train/test in sklearn train_test_split style, sliding window for quarter
 
-def date_split(df):
+def date_split(df, year, quarter):
 
     features = ['mean_5', 'mean_30', 'mean_365', 'std_5', 'std_30', 'std_365']
     label = '5. adjusted close'
 
-    train = df[df['date'] < datetime(year=2020, month=1, day=1)]
-    test = df[df['date'] >= datetime(year=2020, month=1, day=1)]
+    if quarter == 1:
+        month = 1
+    if quarter == 2:
+        month = 4
+    if quarter == 3:
+        month = 7
+    if quarter == 4:
+        month = 10
+
+    train = df[df['date'] < datetime(year=year, month=month, day=1)]
+    test = df[(df['date'].dt.year == year) & (df['date'].dt.quarter == quarter)]
 
     X_train = train[features]
     X_test = test[features]
@@ -58,44 +67,50 @@ def date_split(df):
 
     return X_train, X_test, y_train, y_test
 
-X_train, X_test, y_train, y_test = date_split(cvx)
-
 
 # list of models to test, linear regression and mlp regressor are the most effective models
 
-rfr = RandomForestRegressor()
-knn = KNeighborsRegressor()
 lr = LinearRegression()
 nn = MLPRegressor()
 
-models = [knn, lr, rfr, nn]
+models = [['lr', lr], ['nn', nn]]
+quarters = [1, 2, 3, 4]
 
-results = pd.DataFrame()
-results['actual'] = y_test
-results['date'] = cvx['date']
+prediction_list = []
 
-for model in enumerate(models):
-    model[1].fit(X_train, y_train)
-    predictions = model[1].predict(X_test)
-    results[model[0]] = predictions
-    print(model[1])
-    print('-'*25)
-    print('mae:', mean_absolute_error(y_test, predictions))
-    print('mse:', mean_squared_error(y_test, predictions))
-    print('r2:', r2_score(y_test, predictions))
-    print('\n')
+for model in models:
+
+    for quarter in quarters:
+        X_train, X_test, y_train, y_test = date_split(cvx, 2020, quarter)
+
+        results = pd.DataFrame()
+        results['actual'] = y_test
+        results['date'] = cvx['date']
+        results['model'] = model[0]
+
+        model[1].fit(X_train, y_train)
+        prediction = model[1].predict(X_test)
+        results['predictions'] = prediction
+
+        prediction_list.append(results)
+
+        print(model[0])
+        print('-'*25)
+        print('quarter:', quarter)
+        print('-'*15)
+        print('mae:', mean_absolute_error(y_test, prediction))
+        print('mse:', mean_squared_error(y_test, prediction))
+        print('r2:', r2_score(y_test, prediction))
+        print('\n')
+
+predictions = pd.concat(prediction_list)
 
 
-# visualizing predictions across prices and time
+# combining & visualizing quarterly predictions for each model
 
-sns.pairplot(results, y_vars='actual')
-plt.show()
-
-sns.lineplot(x=results['date'], y=results['actual'])
-sns.lineplot(x=results['date'], y=results[0])
-sns.lineplot(x=results['date'], y=results[1])
-sns.lineplot(x=results['date'], y=results[2])
-sns.lineplot(x=results['date'], y=results[3])
-plt.xticks(rotation=30)
-plt.legend(['actual', 'knn', 'lr', 'rfr', 'nn'])
-plt.show()
+for model in models:
+    df = predictions[predictions['model'] == model[0]]
+    sns.lineplot(df['date'], df['actual'])
+    sns.lineplot(df['date'], df['predictions'])
+    plt.legend(['actual', model[0]])
+    plt.show()
